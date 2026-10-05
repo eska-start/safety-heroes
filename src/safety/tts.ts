@@ -2,6 +2,23 @@
 // 사용자 제스처 잠금을 먼저 해제한다.
 let voice: SpeechSynthesisVoice | null = null;
 let unlocked = false;
+let ttsOn = true;
+try {
+  ttsOn = localStorage.getItem("sh-tts") !== "0";
+} catch {
+  /* ignore */
+}
+
+export const isTtsOn = () => ttsOn;
+export function setTtsOn(on: boolean) {
+  ttsOn = on;
+  try {
+    localStorage.setItem("sh-tts", on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+  if (!on) stopSpeak();
+}
 
 function pickVoice() {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -43,6 +60,7 @@ export function unlockAudio() {
 
 export function speak(text: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (!ttsOn) return;
   unlockAudio();
   pickVoice();
   window.speechSynthesis.cancel();
