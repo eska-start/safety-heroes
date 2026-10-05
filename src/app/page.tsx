@@ -1,7 +1,7 @@
 "use client";
 
-import { Game } from "@/safety/Game";
+import { Tetris } from "@/tetris/Tetris";
 
 export default function HomePage() {
-  return <Game />;
+  return <Tetris />;
 }
