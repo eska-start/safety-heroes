@@ -1,210 +1,193 @@
 "use client";
 import { useEffect, useState } from "react";
-import { lessonsOf } from "./lessons";
-import { useSafety } from "./store";
-import { speak, stopSpeak } from "./tts";
-import { Scene3D } from "./Scene3D";
+import { lessonsOf, type Role } from "./lessons";
+import { speak, stopSpeak, unlockAudio } from "./tts";
+import { FireGame } from "./FireGame";
+import { CrossGame } from "./CrossGame";
 
-function TopBar({ title }: { title: string }) {
+type Phase = "home" | "brief" | "play" | "result";
+
+export function Game() {
+  const [phase, setPhase] = useState<Phase>("home");
+  const [role, setRole] = useState<Role>("fire");
+  const [score, setScore] = useState(0);
+  const [stars, setStars] = useState(0);
+  const [won, setWon] = useState(true);
+
+  const go = (p: Phase) => {
+    unlockAudio();
+    setPhase(p);
+  };
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-      <h1 style={{ fontSize: 32, margin: 0 }}>{title}</h1>
+    <div style={{ maxWidth: 680, margin: "0 auto", padding: 20 }}>
+      {phase === "home" && (
+        <Home
+          onPick={(r) => {
+            setRole(r);
+            go("brief");
+            speak(
+              r === "fire"
+                ? "소방관 미션! 밤거리에 불이 났어요. 호스로 불을 꺼요. 목표는 열 개!"
+                : "경찰관 미션! 차가 달리는 길을 세 번 건너요. 빨간불엔 차가 멈춰요.",
+            );
+          }}
+        />
+      )}
+      {phase === "brief" && (
+        <Brief
+          role={role}
+          onStart={() => go("play")}
+          onHome={() => go("home")}
+        />
+      )}
+      {phase === "play" && role === "fire" && (
+        <FireGame
+          onFinish={(s) => {
+            setScore(s);
+            setStars(s >= 20 ? 3 : s >= 14 ? 2 : 1);
+            setWon(s >= 10);
+            setPhase("result");
+          }}
+        />
+      )}
+      {phase === "play" && role === "police" && (
+        <CrossGame
+          onFinish={(st, w) => {
+            setStars(st);
+            setWon(w);
+            setScore(st);
+            setPhase("result");
+          }}
+        />
+      )}
+      {phase === "result" && (
+        <Result
+          stars={stars}
+          won={won}
+          score={score}
+          role={role}
+          onRetry={() => go("play")}
+          onHome={() => go("home")}
+        />
+      )}
     </div>
   );
 }
 
-function Home() {
-  const setRole = useSafety((s) => s.setRole);
-  const setPhase = useSafety((s) => s.setPhase);
+function Home({ onPick }: { onPick: (r: Role) => void }) {
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto", padding: 20 }}>
-      <TopBar title="🦸 도와줘요 안전히어로즈" />
-      <p style={{ fontSize: 22 }}>누구와 배울까? 눌러봐!</p>
+    <>
+      <h1 style={{ fontSize: 36, margin: "8px 0" }}>🦸 안전히어로즈 출동!</h1>
+      <p style={{ fontSize: 22 }}>미션을 골라봐!</p>
       <div style={{ display: "grid", gap: 16 }}>
-        <button
-          className="role-card"
-          onClick={() => {
-            setRole("fire");
-            setPhase("learn");
-            speak("소방관과 불조심을 배워요. 불이 나면 일일구에 전화해요.");
-          }}
-        >
-          🚒 소방관
-          <div style={{ fontSize: 18 }}>불조심 배우기</div>
+        <button className="role-card" onClick={() => onPick("fire")}>
+          <div style={{ fontSize: 64 }}>🚒</div>
+          <div>소방관: 불 끄기 출동</div>
+          <div style={{ fontSize: 18, color: "#666" }}>호스로 불 10개 끄기 · 60초</div>
         </button>
-        <button
-          className="role-card"
-          onClick={() => {
-            setRole("police");
-            setPhase("learn");
-            speak("경찰관과 길조심을 배워요. 횡단보도에서 손을 들고 건너요.");
-          }}
-        >
-          👮 경찰관
-          <div style={{ fontSize: 18 }}>길조심 배우기</div>
+        <button className="role-card" onClick={() => onPick("police")}>
+          <div style={{ fontSize: 64 }}>👮</div>
+          <div>경찰관: 횡단보도 건너기</div>
+          <div style={{ fontSize: 18, color: "#666" }}>차 피해서 3번 건너기 · 목숨 3개</div>
         </button>
       </div>
       <button
         className="big-btn secondary"
         style={{ marginTop: 16 }}
-        onClick={() => speak("소방관이나 경찰관을 눌러봐. 소리가 나올거야.")}
+        onClick={() => speak("소방관은 불 끄기, 경찰관은 길 건너기 미션이야. 하나를 눌러봐!")}
       >
-        🔊 소리 내기
+        🔊 설명 듣기
       </button>
-    </div>
+    </>
   );
 }
 
-function Learn() {
-  const role = useSafety((s) => s.role);
-  const step = useSafety((s) => s.step);
-  const next = useSafety((s) => s.next);
-  const setPhase = useSafety((s) => s.setPhase);
-  const reset = useSafety((s) => s.reset);
-  const lessons = lessonsOf(role);
-  const lesson = lessons[step];
-
+function Brief({ role, onStart, onHome }: { role: Role; onStart: () => void; onHome: () => void }) {
+  const lessons = lessonsOf(role).slice(0, 2);
   useEffect(() => {
-    if (lesson) speak(`${lesson.title}. ${lesson.script}`);
+    const text = lessons.map((l) => `${l.title}. ${l.script}`).join(" ");
+    speak(`출동 전 안전수칙! ${text}`);
     return () => stopSpeak();
-  }, [lesson]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role]);
 
-  if (!lesson) {
-    setPhase("quiz");
-    return null;
-  }
-  const last = step === lessons.length - 1;
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto", padding: 20 }}>
-      <TopBar title={`${lesson.icon} ${lesson.title}`} />
-      <div className="scene-wrap">
-        <Scene3D lesson={lesson} />
-      </div>
-      <p style={{ fontSize: 24 }}>{lesson.script}</p>
-      <div style={{ display: "grid", gap: 12 }}>
-        <button className="big-btn secondary" onClick={() => speak(`${lesson.title}. ${lesson.script}`)}>
+    <>
+      <h1 style={{ fontSize: 32 }}>{role === "fire" ? "🚒 출동 전 안전수칙" : "👮 출동 전 안전수칙"}</h1>
+      {lessons.map((l) => (
+        <div key={l.id} style={card}>
+          <span style={{ fontSize: 44 }}>{l.icon}</span>
+          <div>
+            <div style={{ fontSize: 24 }}>{l.title}</div>
+            <div style={{ fontSize: 18, color: "#555" }}>{l.script}</div>
+          </div>
+        </div>
+      ))}
+      <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+        <button
+          className="big-btn secondary"
+          onClick={() => speak(lessons.map((l) => `${l.title}. ${l.script}`).join(" "))}
+        >
           🔊 다시 듣기
         </button>
-        <button
-          className="big-btn"
-          onClick={() => {
-            if (last) {
-              setPhase("quiz");
-              speak("이제 문제를 풀어보자!");
-            } else {
-              next();
-            }
-          }}
-        >
-          {last ? "문제 풀기 ➜" : "다음 ➜"}
+        <button className="big-btn" onClick={onStart}>
+          출동! ➜
         </button>
-        <button className="big-btn secondary" onClick={reset}>
+        <button className="big-btn secondary" onClick={onHome}>
           처음으로
         </button>
       </div>
-      <p style={{ fontSize: 18 }}>
-        {step + 1} / {lessons.length}
+    </>
+  );
+}
+
+function Result({
+  stars,
+  won,
+  score,
+  role,
+  onRetry,
+  onHome,
+}: {
+  stars: number;
+  won: boolean;
+  score: number;
+  role: Role;
+  onRetry: () => void;
+  onHome: () => void;
+}) {
+  useEffect(() => {
+    speak(won ? `미션 성공! 별 ${stars}개! 정말 훌륭한 히어로예요!` : `아쉬워요. 그래도 별 ${stars}개! 다시 도전해 봐요!`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div style={{ textAlign: "center" }}>
+      <h1>{won ? "🎉 미션 성공!" : "💪 다시 도전!"}</h1>
+      <p style={{ fontSize: 56 }}>{"⭐".repeat(stars)}{"☆".repeat(Math.max(0, 3 - stars))}</p>
+      <p style={{ fontSize: 22 }}>
+        {role === "fire" ? `끈 불 ${score}개` : `별 ${score}개 획득`}
       </p>
-    </div>
-  );
-}
-
-function Quiz() {
-  const role = useSafety((s) => s.role);
-  const quizStep = useSafety((s) => s.quizStep);
-  const nextQuiz = useSafety((s) => s.nextQuiz);
-  const addStar = useSafety((s) => s.addStar);
-  const stars = useSafety((s) => s.stars);
-  const setPhase = useSafety((s) => s.setPhase);
-  const lessons = lessonsOf(role);
-  const lesson = lessons[quizStep];
-  const [picked, setPicked] = useState<number | null>(null);
-
-  useEffect(() => {
-    setPicked(null);
-    if (lesson) speak(lesson.quiz.question);
-  }, [lesson]);
-
-  if (!lesson) {
-    setPhase("done");
-    return null;
-  }
-  const q = lesson.quiz;
-  return (
-    <div style={{ maxWidth: 640, margin: "0 auto", padding: 20 }}>
-      <TopBar title={`⭐ ${stars}개`} />
-      <div className="scene-wrap">
-        <Scene3D lesson={lesson} />
-      </div>
-      <p style={{ fontSize: 26 }}>{q.question}</p>
-      <div style={{ display: "flex", gap: 12 }}>
-        {q.options.map((opt, i) => (
-          <button
-            key={i}
-            className={`choice-btn${picked === null ? "" : i === q.correct ? " correct" : picked === i ? " wrong" : ""}`}
-            onClick={() => {
-              if (picked !== null) return;
-              setPicked(i);
-              if (i === q.correct) {
-                addStar();
-                speak("정답! 정말 잘했어요!");
-              } else {
-                speak("괜찮아, 다시 생각해보자. 소리를 들어봐.");
-              }
-            }}
-          >
-            {opt}
-          </button>
-        ))}
-      </div>
-      <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-        <button className="big-btn secondary" onClick={() => speak(q.question)}>
-          🔊 문제 듣기
+      <div style={{ display: "grid", gap: 12 }}>
+        <button className="big-btn" onClick={onRetry}>
+          다시 출동
         </button>
-        {picked !== null && (
-          <button
-            className="big-btn"
-            onClick={() => {
-              if (quizStep + 1 >= lessons.length) {
-                setPhase("done");
-                speak("다 풀었어! 참 잘했어요!");
-              } else {
-                nextQuiz();
-              }
-            }}
-          >
-            다음 ➜
-          </button>
-        )}
+        <button className="big-btn secondary" onClick={onHome}>
+          처음으로
+        </button>
       </div>
     </div>
   );
 }
 
-function Done() {
-  const stars = useSafety((s) => s.stars);
-  const reset = useSafety((s) => s.reset);
-
-  useEffect(() => {
-    speak(`별을 ${stars}개 모았어요! 안전히어로!`);
-  }, [stars]);
-
-  return (
-    <div style={{ maxWidth: 640, margin: "0 auto", padding: 20, textAlign: "center" }}>
-      <h1>🎉 안전히어로! 🎉</h1>
-      <p style={{ fontSize: 40 }}>{"⭐".repeat(Math.max(1, Math.min(4, stars)))} </p>
-      <p style={{ fontSize: 22 }}>별 {stars}개!</p>
-      <button className="big-btn" onClick={reset}>
-        다시 하기
-      </button>
-    </div>
-  );
-}
-
-export function Game() {
-  const phase = useSafety((s) => s.phase);
-  if (phase === "home") return <Home />;
-  if (phase === "learn") return <Learn />;
-  if (phase === "quiz") return <Quiz />;
-  return <Done />;
-}
+const card: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+  alignItems: "flex-start",
+  background: "#fff",
+  borderRadius: 20,
+  padding: 16,
+  marginBottom: 12,
+  boxShadow: "0 6px 16px rgba(0,0,0,0.1)",
+};
