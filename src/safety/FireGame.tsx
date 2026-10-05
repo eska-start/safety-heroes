@@ -6,7 +6,7 @@ import { Firefighter } from "./Characters";
 import { speak } from "./tts";
 import { isMuted, setMuted, sfxBoss, sfxClick, sfxDing, sfxFanfare, startSpray, stopSpray, unlockAudioSys } from "./audio";
 
-const WAVES = [8, 12, 16];
+const WAVES = [8, 12, 15];
 
 interface FireData {
   id: number;
