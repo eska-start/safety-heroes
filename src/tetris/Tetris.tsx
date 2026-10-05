@@ -193,13 +193,8 @@ export function Tetris() {
   const [paused, setPaused] = useState(false);
   pausedRef.current = paused;
 
-  // 메인 루프
+  // 메인 루프 (캔버스는 플레이 중에만 존재하므로 매 프레임 확인)
   useEffect(() => {
-    const cv = canvasRef.current;
-    if (!cv) return;
-    const ctx = cv.getContext("2d");
-    if (!ctx) return;
-    const S = g.current;
     let raf = 0;
     let last = performance.now();
 
@@ -207,8 +202,13 @@ export function Tetris() {
       raf = requestAnimationFrame(loop);
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+      const cv = canvasRef.current;
+      if (!cv) return;
+      const ctx = cv.getContext("2d");
+      if (!ctx) return;
+      const S = g.current;
       if (S.started && !S.over && !pausedRef.current && S.cur) {
-        const step = S.soft ? 25 : gravityMs(S.level) / 1000;
+        const step = S.soft ? 0.025 : gravityMs(S.level) / 1000;
         S.dropAcc += dt;
         while (S.dropAcc >= step) {
           S.dropAcc -= step;
@@ -221,7 +221,7 @@ export function Tetris() {
             S.lockAcc = 0;
           } else {
             S.locking = true;
-            S.lockAcc += step;
+            S.lockAcc += dt;
             if (S.soft) S.score += 1;
             if (S.lockAcc >= 0.5) {
               S.dropAcc = 0;
